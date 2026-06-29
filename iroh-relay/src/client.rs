@@ -161,6 +161,10 @@ pub struct ClientBuilder {
     dns_resolver: DnsResolver,
     /// Cache for public keys of remote endpoints.
     key_cache: KeyCache,
+    /// mp-iroh POC: device to pin the relay TCP socket to (`SO_BINDTODEVICE`),
+    /// so the relay fallback uses the same physical interface as the endpoint's
+    /// direct UDP path. `None` leaves the dial unpinned.
+    bind_device: Option<Vec<u8>>,
 }
 
 impl ClientBuilder {
@@ -180,7 +184,15 @@ impl ClientBuilder {
             dns_resolver,
             key_cache: KeyCache::new(128),
             auth_token: None,
+            bind_device: None,
         }
+    }
+
+    /// mp-iroh POC: pin the relay TCP dial to a physical interface
+    /// (`SO_BINDTODEVICE`, Linux only). `None` leaves the dial unpinned.
+    pub fn bind_device(mut self, device: Option<Vec<u8>>) -> Self {
+        self.bind_device = device;
+        self
     }
 
     /// Sets a custom TLS config.
@@ -291,7 +303,8 @@ impl ClientBuilder {
         let mut builder =
             MaybeTlsStreamBuilder::new(dial_url.clone(), self.dns_resolver.clone(), tls_config)
                 .prefer_ipv6(self.prefer_ipv6())
-                .proxy_url(self.proxy_url.clone());
+                .proxy_url(self.proxy_url.clone())
+                .bind_device(self.bind_device.clone());
 
         let stream = builder.connect().await?;
         let local_addr = stream

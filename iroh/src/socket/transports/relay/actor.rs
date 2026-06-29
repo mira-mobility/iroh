@@ -208,6 +208,8 @@ struct RelayConnectionOptions {
     prefer_ipv6: Arc<AtomicBool>,
     tls_config: rustls::ClientConfig,
     auth_token: Option<String>,
+    /// mp-iroh POC: device to pin the relay TCP socket to (`SO_BINDTODEVICE`).
+    bind_device: Option<Vec<u8>>,
 }
 
 /// Possible reasons for a failed relay connection.
@@ -297,6 +299,7 @@ impl ActiveRelayActor {
             prefer_ipv6,
             tls_config,
             auth_token,
+            bind_device,
         } = opts;
 
         let mut builder = relay::client::ClientBuilder::new(
@@ -306,7 +309,8 @@ impl ActiveRelayActor {
             dns_resolver,
         )
         .tls_client_config(tls_config)
-        .address_family_selector(move || prefer_ipv6.load(Ordering::Relaxed));
+        .address_family_selector(move || prefer_ipv6.load(Ordering::Relaxed))
+        .bind_device(bind_device);
         if let Some(proxy_url) = proxy_url {
             builder = builder.proxy_url(proxy_url);
         }
@@ -879,6 +883,9 @@ pub(crate) struct Config {
     /// Per-relay configuration. Consulted when starting a connection to
     /// look up the auth token and any future per-relay options.
     pub relay_map: RelayMap,
+    /// mp-iroh POC: device to pin this endpoint's relay TCP socket to
+    /// (`SO_BINDTODEVICE`), matching the device of its direct UDP path.
+    pub bind_device: Option<Vec<u8>>,
 }
 
 /// Connection state of the home relay.
@@ -1246,6 +1253,7 @@ impl RelayActor {
             prefer_ipv6: self.config.ipv6_reported.clone(),
             tls_config: self.config.tls_config.clone(),
             auth_token,
+            bind_device: self.config.bind_device.clone(),
         };
 
         // TODO: Replace 64 with PER_CLIENT_SEND_QUEUE_DEPTH once that's unused
@@ -1437,6 +1445,7 @@ mod tests {
                     .client_config(default_provider())
                     .expect("infallible"),
                 auth_token: None,
+                bind_device: None,
             },
             stop_token,
             metrics: Default::default(),

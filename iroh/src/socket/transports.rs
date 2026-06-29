@@ -171,6 +171,20 @@ impl TransportConfig {
         }
     }
 
+    /// mp-iroh POC: the bind port of a user-defined IPv4 IP transport, if this is
+    /// one. Used to look up the per-interface device (`IROH_BIND_DEV_<port>`) so
+    /// the relay TCP can be pinned to the same NIC as the direct UDP path.
+    #[cfg(not(wasm_browser))]
+    pub(crate) fn user_defined_ipv4_port(&self) -> Option<u16> {
+        match self {
+            Self::Ip {
+                config: ip::Config::V4 { port, .. },
+                is_user_defined: true,
+            } => Some(*port),
+            _ => None,
+        }
+    }
+
     /// Is this configuration set by the user.
     pub(crate) fn is_user_defined(&self) -> bool {
         match self {

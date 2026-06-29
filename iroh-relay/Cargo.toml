@@ -87,6 +87,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = tr
 # non-wasm-in-browser dependencies
 [target.'cfg(not(all(target_family = "wasm", target_os = "unknown")))'.dependencies]
 hickory-resolver = { version = "0.26.0", features = ["tokio", "system-config"] }
+# mp-iroh POC: SO_BINDTODEVICE on the relay client's TCP dial (interface pinning).
+socket2 = { version = "0.6", features = ["all"] }
 tokio = { version = "1", features = [
     "io-util",
     "macros",
