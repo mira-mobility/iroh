@@ -922,17 +922,15 @@ impl EndpointInner {
 
         let ipv6_reported = Arc::new(AtomicBool::new(false));
 
-        // mp-iroh POC: pin the relay client's TCP to the same physical interface
-        // as this endpoint's direct UDP path. The device is keyed by the
-        // user-defined IPv4 bind port via `IROH_BIND_DEV_<port>`, mirroring the
-        // netwatch SO_BINDTODEVICE patch so e.g. endpoint :6000 -> eth0 pins both
-        // its UDP socket and its relay TCP to eth0. Linux-only at the dial site.
+        // mp-iroh: pin the relay client's TCP to the same physical interface as
+        // this endpoint's direct UDP path. The device comes from the user-defined
+        // IPv4 transport's `BindOpts::set_device`, so e.g. an endpoint bound with
+        // device "eth0" pins both its UDP socket and its relay TCP to eth0.
+        // Linux-only at the dial site.
         #[cfg(not(wasm_browser))]
         let bind_device = transport_configs
             .iter()
-            .find_map(|t| t.user_defined_ipv4_port())
-            .and_then(|port| std::env::var(format!("IROH_BIND_DEV_{port}")).ok())
-            .map(String::into_bytes);
+            .find_map(|t| t.user_defined_ipv4_device());
         #[cfg(wasm_browser)]
         let bind_device = None;
 

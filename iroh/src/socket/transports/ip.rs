@@ -25,7 +25,9 @@ pub(crate) struct IpTransport {
 }
 
 /// IP transport configuration
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+// mp-iroh: `device` (SO_BINDTODEVICE) makes this non-`Copy` (it owns a `Vec`);
+// it is cloned where it used to be copied.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Config {
     /// General IPv4 binding
     V4 {
@@ -37,6 +39,8 @@ pub(crate) enum Config {
         is_required: bool,
         /// Is this a default route?
         is_default: bool,
+        /// mp-iroh: interface to pin the socket to via `SO_BINDTODEVICE`.
+        device: Option<Vec<u8>>,
     },
     /// General IPv6 binding
     V6 {
@@ -50,6 +54,8 @@ pub(crate) enum Config {
         is_required: bool,
         /// Is this a default route?
         is_default: bool,
+        /// mp-iroh: interface to pin the socket to via `SO_BINDTODEVICE`.
+        device: Option<Vec<u8>>,
     },
 }
 
@@ -85,6 +91,13 @@ impl Config {
         match self {
             Self::V4 { is_required, .. } => *is_required,
             Self::V6 { is_required, .. } => *is_required,
+        }
+    }
+
+    /// mp-iroh: the interface this socket is pinned to (`SO_BINDTODEVICE`), if any.
+    pub(crate) fn device(&self) -> Option<&[u8]> {
+        match self {
+            Self::V4 { device, .. } | Self::V6 { device, .. } => device.as_deref(),
         }
     }
 
@@ -162,9 +175,12 @@ impl From<Config> for SocketAddr {
 
 impl IpTransport {
     pub(crate) fn bind(config: Config, metrics: Arc<SocketMetrics>) -> io::Result<Self> {
-        let addr: SocketAddr = config.into();
-        debug!(?addr, "binding");
-        let socket = netwatch::UdpSocket::bind_full(addr).inspect_err(|err| {
+        let addr: SocketAddr = config.clone().into();
+        // mp-iroh: pin the UDP socket to the configured interface (if any). The
+        // device is carried on the `Config` so it is re-applied on rebind.
+        let device = config.device().map(<[u8]>::to_vec);
+        debug!(?addr, ?device, "binding");
+        let socket = netwatch::UdpSocket::bind_full_with_device(addr, device).inspect_err(|err| {
             debug!(%addr, "failed to bind: {err:#}");
         })?;
         let local_addr = socket.local_addr()?;
@@ -240,7 +256,7 @@ impl IpTransport {
     }
 
     pub(crate) fn bind_addr(&self) -> SocketAddr {
-        self.config.into()
+        self.config.clone().into()
     }
 
     pub(super) fn create_network_change_sender(&self) -> IpNetworkChangeSender {
@@ -253,7 +269,7 @@ impl IpTransport {
     pub(super) fn create_sender(&self) -> IpSender {
         let sender = self.socket.clone().create_sender();
         IpSender {
-            config: self.config,
+            config: self.config.clone(),
             sender,
             metrics: self.metrics.clone(),
         }
@@ -417,10 +433,18 @@ impl IpTransports {
         let mut ip_v6 = Vec::new();
 
         for config in configs {
+            // Capture the flags before `config` is moved into `bind` (mp-iroh:
+            // `Config` is no longer `Copy` now that it carries the device).
+            let (is_ipv4, is_ipv6, is_default, is_required) = (
+                config.is_ipv4(),
+                config.is_ipv6(),
+                config.is_default(),
+                config.is_required(),
+            );
             match IpTransport::bind(config, metrics.socket.clone()) {
                 Ok(transport) => {
-                    if config.is_ipv4() {
-                        if config.is_default() {
+                    if is_ipv4 {
+                        if is_default {
                             if has_v4_default {
                                 return Err(io::Error::other(
                                     "can only have a single IPv4 default transport",
@@ -429,8 +453,8 @@ impl IpTransports {
                             has_v4_default = true;
                         }
                         ip_v4.push(transport);
-                    } else if config.is_ipv6() {
-                        if config.is_default() {
+                    } else if is_ipv6 {
+                        if is_default {
                             if has_v6_default {
                                 return Err(io::Error::other(
                                     "can only have a single IPv6 default transport",
@@ -442,7 +466,7 @@ impl IpTransports {
                     }
                 }
                 Err(err) => {
-                    if config.is_required() {
+                    if is_required {
                         return Err(err);
                     }
                     info!("ignoring non required bind failure: {:?}", err);
@@ -486,18 +510,21 @@ mod tests {
                 port: 2222,
                 is_required: true,
                 is_default: false,
+                device: None,
             },
             Config::V4 {
                 ip_net: Ipv4Net::new("127.0.0.1".parse().unwrap(), 24).unwrap(),
                 port: 1111,
                 is_required: true,
                 is_default: true,
+                device: None,
             },
             Config::V4 {
                 ip_net: Ipv4Net::new("127.0.0.1".parse().unwrap(), 0).unwrap(),
                 port: 9999,
                 is_required: true,
                 is_default: false,
+                device: None,
             },
             Config::V6 {
                 ip_net: Ipv6Net::new("::1".parse().unwrap(), 4).unwrap(),
@@ -505,6 +532,7 @@ mod tests {
                 scope_id: 0,
                 is_required: has_ipv6,
                 is_default: false,
+                device: None,
             },
             Config::V6 {
                 ip_net: Ipv6Net::new("::1".parse().unwrap(), 2).unwrap(),
@@ -512,6 +540,7 @@ mod tests {
                 scope_id: 0,
                 is_required: has_ipv6,
                 is_default: true,
+                device: None,
             },
             Config::V6 {
                 ip_net: Ipv6Net::new("::1".parse().unwrap(), 32).unwrap(),
@@ -519,6 +548,7 @@ mod tests {
                 scope_id: 0,
                 is_required: has_ipv6,
                 is_default: false,
+                device: None,
             },
         ];
 

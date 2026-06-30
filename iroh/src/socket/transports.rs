@@ -131,6 +131,7 @@ impl TransportConfig {
                 port: 0,
                 is_required: true,
                 is_default: false,
+                device: None,
             },
             is_user_defined: false,
         }
@@ -148,6 +149,7 @@ impl TransportConfig {
                 port: 0,
                 is_required: false,
                 is_default: false,
+                device: None,
             },
             is_user_defined: false,
         }
@@ -171,16 +173,16 @@ impl TransportConfig {
         }
     }
 
-    /// mp-iroh POC: the bind port of a user-defined IPv4 IP transport, if this is
-    /// one. Used to look up the per-interface device (`IROH_BIND_DEV_<port>`) so
-    /// the relay TCP can be pinned to the same NIC as the direct UDP path.
+    /// mp-iroh: the pinned interface (`SO_BINDTODEVICE`) of a user-defined IPv4 IP
+    /// transport, if this is one and a device was set. Used to pin the endpoint's
+    /// relay TCP to the same NIC as its direct UDP path.
     #[cfg(not(wasm_browser))]
-    pub(crate) fn user_defined_ipv4_port(&self) -> Option<u16> {
+    pub(crate) fn user_defined_ipv4_device(&self) -> Option<Vec<u8>> {
         match self {
             Self::Ip {
-                config: ip::Config::V4 { port, .. },
+                config: ip::Config::V4 { device, .. },
                 is_user_defined: true,
-            } => Some(*port),
+            } => device.clone(),
             _ => None,
         }
     }
@@ -231,7 +233,7 @@ impl Transports {
                     {
                         continue;
                     }
-                    ip_configs.push(*config);
+                    ip_configs.push(config.clone());
                 }
             }
             ip_configs

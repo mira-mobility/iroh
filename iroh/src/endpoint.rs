@@ -468,6 +468,7 @@ impl Builder {
                         port: addr.port(),
                         is_required: opts.is_required(),
                         is_default: opts.is_default_route(),
+                        device: opts.device().map(<[u8]>::to_vec),
                     },
                     is_user_defined: true,
                 });
@@ -490,6 +491,7 @@ impl Builder {
                         port: addr.port(),
                         is_required: opts.is_required(),
                         is_default: opts.is_default_route(),
+                        device: opts.device().map(<[u8]>::to_vec),
                     },
                     is_user_defined: true,
                 });

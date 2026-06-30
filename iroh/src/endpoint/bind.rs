@@ -38,6 +38,12 @@ pub struct BindOpts {
     ///
     /// See [`Self::prefix_len`] for details of how such routing works.
     is_default_route: Option<bool>,
+    /// mp-iroh: interface to pin this socket to via `SO_BINDTODEVICE`.
+    ///
+    /// When set, the socket — and the relay client belonging to the same
+    /// endpoint — egress only this physical interface (e.g. `b"eth0".to_vec()`).
+    /// `None` leaves the socket unpinned (default). Linux-only at the syscall.
+    device: Option<Vec<u8>>,
 }
 
 impl Default for BindOpts {
@@ -46,6 +52,7 @@ impl Default for BindOpts {
             prefix_len: 0,
             is_required: true,
             is_default_route: None,
+            device: None,
         }
     }
 }
@@ -118,6 +125,22 @@ impl BindOpts {
             Some(is_default) => is_default,
             None => self.prefix_len() == 0,
         }
+    }
+
+    /// mp-iroh: pin this socket (and the endpoint's relay client) to a physical
+    /// interface via `SO_BINDTODEVICE`, e.g. `set_device(Some(b"eth0".to_vec()))`.
+    ///
+    /// `None` (the default) leaves it unpinned. The device name is applied on
+    /// Linux/Android/Fuchsia and ignored elsewhere. Because it is carried on the
+    /// bind config, it is re-applied if the socket rebinds on a network change.
+    pub fn set_device(mut self, device: Option<Vec<u8>>) -> Self {
+        self.device = device;
+        self
+    }
+
+    /// Returns the interface set by [`Self::set_device`].
+    pub fn device(&self) -> Option<&[u8]> {
+        self.device.as_deref()
     }
 }
 
