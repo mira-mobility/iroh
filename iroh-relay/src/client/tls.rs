@@ -461,7 +461,7 @@ mod tests {
 
         let addrs = (1..5).map(dead_v4).chain([Ipv4Addr::LOCALHOST]).collect();
         let resolver = static_resolver(addrs, vec![]);
-        let stream = dial_happy_eyeballs(&resolver, &relay_url(port), false)
+        let stream = dial_happy_eyeballs(&resolver, &relay_url(port), false, None)
             .await
             .expect("should skip the invalid addrs and still connect");
         assert_eq!(stream.peer_addr().unwrap().ip(), Ipv4Addr::LOCALHOST);
@@ -474,7 +474,7 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         let resolver = static_resolver(vec![Ipv4Addr::LOCALHOST], vec![dead_v6(1), dead_v6(2)]);
 
-        let stream = dial_happy_eyeballs(&resolver, &relay_url(port), true)
+        let stream = dial_happy_eyeballs(&resolver, &relay_url(port), true, None)
             .await
             .expect("falls back to IPv4");
         assert!(stream.peer_addr().unwrap().is_ipv4());
@@ -483,7 +483,7 @@ mod tests {
     #[tokio::test]
     async fn errors_when_all_addresses_unreachable() {
         let resolver = static_resolver(vec![dead_v4(1), dead_v4(2)], vec![dead_v6(1)]);
-        let err = dial_happy_eyeballs(&resolver, &relay_url(80), true)
+        let err = dial_happy_eyeballs(&resolver, &relay_url(80), true, None)
             .await
             .expect_err("nothing reachable");
         dbg!(&err);
@@ -496,7 +496,7 @@ mod tests {
     #[tokio::test]
     async fn errors_when_nothing_resolves() {
         let resolver = static_resolver(vec![], vec![]);
-        let err = dial_happy_eyeballs(&resolver, &relay_url(80), false)
+        let err = dial_happy_eyeballs(&resolver, &relay_url(80), false, None)
             .await
             .expect_err("no addresses to dial");
         assert!(matches!(err, DialError::Dns { .. }));
