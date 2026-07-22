@@ -24,6 +24,13 @@ pub(crate) struct IpTransport {
     metrics: Arc<SocketMetrics>,
 }
 
+impl std::fmt::Display for IpTransport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let version = if self.config.is_ipv4() { "v4" } else { "v6" };
+        write!(f, "IpTransport({version})")
+    }
+}
+
 /// IP transport configuration
 // mp-iroh: `device` (SO_BINDTODEVICE) makes this non-`Copy` (it owns a `Vec`);
 // it is cloned where it used to be copied.
